@@ -28,7 +28,9 @@ class LapLoggerCallback(BaseCallback):
         return True
 
     def _on_training_end(self) -> None:
-        os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
+        dir_path = os.path.dirname(self.log_path)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
         with open(self.log_path, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["Timestep", "Lap", "LapTime"])

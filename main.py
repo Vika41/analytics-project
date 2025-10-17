@@ -32,9 +32,9 @@ modelPPO = PPO(
     clip_range=0.2
 )
 
-callback_ppo_top = LapLoggerCallback(log_path="ppo_topdown_stats.csv", verbose=1)
+callback_ppo_top = LapLoggerCallback(log_path="logs/ppo_topdown_stats.csv", verbose=1)
 modelPPO.learn(total_timesteps=300_000, callback=callback_ppo_top)
-modelPPO.save("ppo_topdown_v2")
+modelPPO.save("ppo_topdown_v3")
 
 ppo_top_results = load_results(log_dir_ppo_top)
 x, y = ts2xy(ppo_top_results, 'timesteps')
@@ -88,9 +88,9 @@ modelTD3 = TD3(
     gamma=0.98
 )
 
-callback_td3_top = LapLoggerCallback(log_path="td3_topdown_stats.csv", verbose=1)
+callback_td3_top = LapLoggerCallback(log_path="logs/td3_topdown_stats.csv", verbose=1)
 modelTD3.learn(total_timesteps=300_000, callback=callback_td3_top)
-modelTD3.save("td3_topdown_v2")
+modelTD3.save("td3_topdown_v3")
 
 td3_top_results = load_results(log_dir_td3_top)
 x, y = ts2xy(td3_top_results, 'timesteps')
@@ -141,9 +141,10 @@ model = PPO(
     gamma=0.99,
     clip_range=0.2
 )
+callback_ppo_grid = LapLoggerCallback(log_path="logs/ppo_gridbased_stats.csv", verbose=1)
 #model.learn(total_timesteps=100_000)
-model.learn(total_timesteps=300_000)
-model.save("ppo_gridbased_v2")
+model.learn(total_timesteps=300_000, callback=callback_ppo_grid)
+model.save("ppo_gridbased_v3")
 
 ppo_grid_results = load_results(log_dir_ppo_grid)
 x, y = ts2xy(ppo_grid_results, 'timesteps')
@@ -196,8 +197,10 @@ modelDQN = DQN(
     train_freq=1,
     target_update_interval=500
 )
-modelDQN.learn(total_timesteps=300_000)
-modelDQN.save("dqn_gridbased_v2")
+callback_dqn_grid = LapLoggerCallback(log_path="logs/dqn_gridbased_stats.csv", verbose=1)
+#model.learn(total_timesteps=100_000)
+modelDQN.learn(total_timesteps=300_000, callback=callback_dqn_grid)
+modelDQN.save("dqn_gridbased_v3")
 
 dqn_grid_results = load_results(log_dir_dqn_grid)
 x, y = ts2xy(dqn_grid_results, 'timesteps')
@@ -227,10 +230,10 @@ plt.title("Lap Times - DQN Grid-Based Agent")
 plt.grid(True)
 plt.show()
 
-#df = pd.read_csv("lap_times_topdown.csv", names=["Lap", "Time"])
-#print(df.describe())
-#df.plot(x="Lap", y="Time", title="Lap Time Trend")
+df = pd.read_csv("top_lap_times.csv", names=["Lap", "Time"])
+print(df.describe())
+df.plot(x="Lap", y="Time", title="Lap Time Trend")
 
-#df2 = pd.read_csv("grid_lap_times.csv", names=["Lap", "Time"])
-#print(df2.describe())
-#df2.plot(x="Lap", y="Time", title="Lap Time Trend")
+df2 = pd.read_csv("grid_lap_times.csv", names=["Lap", "Time"])
+print(df2.describe())
+df2.plot(x="Lap", y="Time", title="Lap Time Trend")

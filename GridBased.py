@@ -15,12 +15,16 @@ class GridBasedEnv(gym.Env):
         self.agent_dir = 0 # 0: up, 1: right, 2: down, 3: left
 
         self.finish_pos = [1, 1]
+        self.prev_pos = self.agent_pos.copy()
+        self.num_checkpoints = len(self.checkpoints)
 
         self.track = np.zeros(self.grid_size, dtype=np.float32)
         self._build_track()
         #self.track[1:-1,1:-1] = 1.0
 
-        self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(10, 10, 2), dtype=np.float32)
+        obs_dim = 10 * 10 * 2 + self.num_checkpoints + 1
+        #self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(10, 10, 2), dtype=np.float32)
+        self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(obs_dim,), dtype=np.float32)
         self.action_space = spaces.Discrete(4)
 
         self.max_steps = 200
@@ -77,6 +81,16 @@ class GridBasedEnv(gym.Env):
             reward -= 5.0
             terminated = True
             print(f"[CRASH] Off-track at step {self.step_count}, pos={self.agent_pos}")
+
+        if self.step_count > 1 and self.agent_pos == self.prev_pos:
+            reward -= 0.2
+        self.prev_pos = self.agent_pos.copy()
+
+        remaining = [i for i in range(self.num_checkpoints) if i not in self.passed_checkpoints]
+        if remaining:
+            next_cp = self.checkpoints[remaining[0]]
+            dist = np.linalg.norm(np.array(next_cp) - np.array(self.agent_pos))
+            reward += max(0, 5.0 - dist) * 0.05
 
         # Checkpoint Logic
         pos_tuple = tuple(self.agent_pos)
@@ -138,8 +152,18 @@ class GridBasedEnv(gym.Env):
         x, y = self.agent_pos
         if 0 <= x < 10 and 0 <= y < 10:
             agent_mask[x, y] = 1.0
-        obs = np.stack([layout, agent_mask], axis=-1)
-        return obs.astype(np.float32)
+        checkpoint_obs = np.zeros(self.num_checkpoints, dtype=np.float32)
+        for i in self.passed_checkpoints:
+            checkpoint_obs[i] = 1.0
+        lap_ratio = np.array([self.current_lap / self.max_laps], dtype=np.float32)
+        #obs = np.stack([layout, agent_mask], axis=-1)
+        obs = np.concatenate([
+            layout.flatten(),
+            agent_mask.flatten(),
+            checkpoint_obs,
+            lap_ratio
+        ]).astype(np.float32)
+        return obs
     
     def render(self, mode='human'):
         print(f"Position: {self.agent_pos}, Direction: {self.agent_dir}, Lap: {self.current_lap}, Checkpoints: {sorted(self.passed_checkpoints)}")

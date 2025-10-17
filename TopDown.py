@@ -18,12 +18,15 @@ class TopDownEnv(gym.Env):
         self.bg_color = (0, 0, 0)
 
         self.car_pos = np.array([150.0, 150.0])
-
         self.car_angle = 0.0
         self.car_speed = 0.0
+        self.prev_pos = self.car_pos.copy()
+        self.num_checkpoints = len(self.checkpoints)
         
+        obs_dim = 64 * 64 * 3 + self.num_checkpoints + 1
         self.action_space = spaces.Box(low=np.array([-1, 0]), high=np.array([1, 1]), dtype=np.float32)
-        self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(64, 64, 3), dtype=np.float32)
+        #self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(64, 64, 3), dtype=np.float32)
+        self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(obs_dim,), dtype=np.float32)
 
         self.max_steps = 500
         self.step_count = 0
@@ -117,6 +120,18 @@ class TopDownEnv(gym.Env):
             terminated = True
             print(f"[CRASH] Off track at step {self.step_count}, pos={self.car_pos}")
 
+        if self.step_count > 1 and np.linalg.norm(self.car_pos - self.prev_pos) < 1.0:
+            reward -= 0.2
+
+        self.prev_pos = self.car_pos.copy()
+
+        remaining = [i for i in range(self.num_checkpoints) if i not in self.passed_checkpoints]
+        if remaining:
+            next_cp = self.checkpoints[remaining[0]]
+            cp_center = np.array([next_cp.centerx, next_cp.centery])
+            dist = np.linalg.norm(cp_center - self.car_pos)
+            reward += max(0, 5.0 - dist / 100.0) * 0.05
+
         car = pygame.Rect(self.car_pos[0]-5, self.car_pos[1]-5, 10, 10)
         for i, cp in enumerate(self.checkpoints):
             if i not in self.passed_checkpoints and car.colliderect(cp):
@@ -153,6 +168,10 @@ class TopDownEnv(gym.Env):
         return obs, reward, terminated, truncated, info
     
     def _get_obs(self):
+        checkpoint_obs = np.zeros(self.num_checkpoints, dtype=np.float32)
+        for i in self.passed_checkpoints:
+            checkpoint_obs[i] = 1.0
+        
         obs = np.zeros((64, 64, 3), dtype=np.float32)
         x = int(self.car_pos[0] / (self.screen_width / 64))
         y = int(self.car_pos[1] / (self.screen_height / 64))
@@ -165,6 +184,12 @@ class TopDownEnv(gym.Env):
         #obs[:, :, 2] = normalized_angle / 360.0   # Normalize angle
         obs[:, :, 1] = min(max(self.car_speed, 0.0), 10.0) / 10.0
         obs[:, :, 2] = (self.car_angle % 360) / 360.0
+
+        obs = np.concatenate([
+            obs.flatten(),
+            checkpoint_obs,
+            [self.current_lap / self.max_laps]
+        ]).astype(np.float32)
         return obs
     
     def _on_track(self, pos):
