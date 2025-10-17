@@ -4,6 +4,7 @@ import os
 import pandas as pd
 
 from GridBased import GridBasedEnv
+from LapLoggerCallback import LapLoggerCallback
 from stable_baselines3 import DQN, PPO, TD3
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
@@ -25,12 +26,14 @@ modelPPO = PPO(
     tensorboard_log=log_dir_ppo_top,
     learning_rate=3e-4,
     ent_coef=0.01,
-    n_steps=2048,
+    n_steps=1024,#2048,
     batch_size=64,
     gamma=0.99,
     clip_range=0.2
 )
-modelPPO.learn(total_timesteps=300_000)
+
+callback_ppo_top = LapLoggerCallback(log_path="ppo_topdown_stats.csv", verbose=1)
+modelPPO.learn(total_timesteps=300_000, callback=callback_ppo_top)
 modelPPO.save("ppo_topdown_v2")
 
 ppo_top_results = load_results(log_dir_ppo_top)
@@ -38,7 +41,7 @@ x, y = ts2xy(ppo_top_results, 'timesteps')
 plt.plot(x, y)
 plt.xlabel("Timesteps")
 plt.ylabel("Episode Reward")
-plt.title("PPO TopDown Learning Curve")
+plt.title("PPO TopDown Learning Curve (with Checkpoints)")
 plt.grid(True)
 plt.show()
 
@@ -84,7 +87,9 @@ modelTD3 = TD3(
     train_freq=(1, "episode"),
     gamma=0.98
 )
-modelTD3.learn(total_timesteps=300_000)
+
+callback_td3_top = LapLoggerCallback(log_path="td3_topdown_stats.csv", verbose=1)
+modelTD3.learn(total_timesteps=300_000, callback=callback_td3_top)
 modelTD3.save("td3_topdown_v2")
 
 td3_top_results = load_results(log_dir_td3_top)
@@ -92,7 +97,7 @@ x, y = ts2xy(td3_top_results, 'timesteps')
 plt.plot(x, y)
 plt.xlabel("Timesteps")
 plt.ylabel("Episode Reward")
-plt.title("TD3 TopDown Learning Curve")
+plt.title("TD3 TopDown Learning Curve (with Checkpoints)")
 plt.grid(True)
 plt.show()
 

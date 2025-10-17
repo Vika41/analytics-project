@@ -38,11 +38,31 @@ class TopDownEnv(gym.Env):
         self.done = False
 
         self.trajectory = np.zeros((self.screen_width, self.screen_height), dtype=np.int32)
+        self.checkpoints = []
+        self.passed_checkpoints = set()
 
     def _build_track(self):
         self.track_surface.fill(self.bg_color)
-        pygame.draw.rect(self.track_surface, self.track_color, pygame.Rect(100, 100, 600, 400), 20)
-        self.finish_line = pygame.Rect(100, 100, 10, 100)
+
+        # Straights
+        pygame.draw.rect(self.track_surface, self.track_color, pygame.Rect(100, 100, 600, 100))     # Top
+        pygame.draw.rect(self.track_surface, self.track_color, pygame.Rect(600, 100, 100, 400))     # Right
+        pygame.draw.rect(self.track_surface, self.track_color, pygame.Rect(100, 400, 600, 100))     # Bottom
+        pygame.draw.rect(self.track_surface, self.track_color, pygame.Rect(100, 200, 100, 200))     # Left
+
+        # Corners
+        pygame.draw.arc(self.track_surface, self.track_color, pygame.Rect(100, 100, 100, 100), np.pi, 1.5*np.pi, 10)    # Top-left
+        pygame.draw.arc(self.track_surface, self.track_color, pygame.Rect(600, 100, 100, 100), 1.5*np.pi, 0, 10)        # Top-right
+        pygame.draw.arc(self.track_surface, self.track_color, pygame.Rect(600, 400, 100, 100), 0, 0.5*np.pi, 10)        # Bottom-right
+        pygame.draw.arc(self.track_surface, self.track_color, pygame.Rect(100, 400, 100, 100), 0.5*np.pi, np.pi, 10)    # Bottom-left
+
+        self.finish_line = pygame.Rect(100, 100, 10, 50)
+        self.checkpoints = [
+            pygame.Rect(300, 100, 10, 50),
+            pygame.Rect(700, 300, 50, 10),
+            pygame.Rect(400, 500, 10, 50),
+            pygame.Rect(100, 300, 50, 10)
+        ]
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
@@ -55,7 +75,13 @@ class TopDownEnv(gym.Env):
         self.current_lap = 0
         self.lap_times = []
         self.trajectory.fill(0)
+        self.passed_checkpoints = set()
+
+        #x, y = self.car_pos.astype(int)
+        #pixel = self.track_surface.get_at((x, y))[:3]
+        #print(f"[RESET] Start pixel color at ({x},{y}) = {pixel}")
         print("[RESET] Starting new episode")
+
         obs = self._get_obs()
         info = {"lap_times": self.lap_times, "current_lap": self.current_lap}
         return obs, info
@@ -63,11 +89,19 @@ class TopDownEnv(gym.Env):
     def step(self, action):
         steer, throttle = np.clip(action, [-1, 0], [1, 1])
         self.car_angle += steer * 5
-        self.car_speed = throttle * 5.0
+        self.car_speed = throttle * 2.0
+
         dx = self.car_speed * np.cos(np.radians(self.car_angle))
         dy = self.car_speed * np.sin(np.radians(self.car_angle))
         self.car_pos += np.array([dx, dy])
         self.step_count += 1
+
+        x, y = self.car_pos.astype(int)
+        print(f"[STEP {self.step_count}] pos={self.car_pos}, angle={self.car_angle}, speed={self.car_speed}")
+        if 0 <= x < self.screen_width and 0 <= y < self.screen_height:
+            pixel = self.track_surface.get_at((x, y))
+            #print(f"[PIXEL] color={pixel[:3]} at ({x}, {y})")
+            self.trajectory[x, y] += 1
 
         #reward = 0.5 if self._on_track(self.car_pos) else -1.0
         reward = 0.1
@@ -75,39 +109,45 @@ class TopDownEnv(gym.Env):
         truncated = self.step_count >= self.max_steps
         lap_time = None
 
-        x, y = self.car_pos.astype(int)
-        if 0 <= x < self.screen_width and 0 <= y < self.screen_height:
-            self.trajectory[x, y] += 1
+        if self._on_track(self.car_pos):
+            reward += 1.0
+            reward += self.car_speed * 0.05
+        else:
+            reward -= 1.0
+            terminated = True
+            print(f"[CRASH] Off track at step {self.step_count}, pos={self.car_pos}")
 
-        print(f"[STEP {self.step_count}] pos={self.car_pos}, angle={self.car_angle}, speed={self.car_speed}")
-        print(f"[PIXEL] color={self.track_surface.get_at(self.car_pos.astype(int))}")
+        car = pygame.Rect(self.car_pos[0]-5, self.car_pos[1]-5, 10, 10)
+        for i, cp in enumerate(self.checkpoints):
+            if i not in self.passed_checkpoints and car.colliderect(cp):
+                self.passed_checkpoints.add(i)
+                reward += 2.0
+                print(f"[CHECKPOINT] Passed checkpoint {i}")
 
-
-        #if self._on_track(self.car_pos):
-        #    reward += 1.0
-        #    reward += self.car_speed * 0.05
-        #else:
-        #    reward -= 1.0
-        #    terminated = True
-        #    print(f"[CRASH] Agent went off track at step {self.step_count}")
-
-        if self._lap_completed():
+        if self._lap_completed(car):
             lap_time = time.time() - self.lap_start_time
-            #self._log_lap_time(lap_time)
+            self._log_lap_time(lap_time)
             self.lap_times.append(lap_time)
             self.lap_start_time = time.time()
             self.current_lap += 1
             reward += max(0, 20.0 - lap_time) # Faster lap = Higher reward
             print(f"[LAP] Completed lap {self.current_lap} in {lap_time:.2f}s")
+            self.passed_checkpoints.clear()
 
             if self.current_lap >= self.max_laps:
                 terminated = True
                 print("[FINISH] Max laps reached")
 
+        #logger.record("topdown/checkpoints_passed", len(self.passed_checkpoints))
+        #logger.record("topdown/lap", self.current_lap)
+        #if lap_time:
+        #    logger.record("topdown/lap_time")
+
         info = {
             "lap_times": self.lap_times,
             "current_lap": self.current_lap,
-            "lap_time": lap_time if self.current_lap > 0 else None
+            "lap_time": lap_time if self.current_lap > 0 else None,
+            "checkpoints_passed": len(self.passed_checkpoints)
         }
         obs = self._get_obs()
         return obs, reward, terminated, truncated, info
@@ -118,8 +158,13 @@ class TopDownEnv(gym.Env):
         y = int(self.car_pos[1] / (self.screen_height / 64))
         if 0 <= x < 64 and 0 <= y < 64:
             obs[y, x, 0] = 1.0                  # Mark car position
-        obs[:, :, 1] = self.car_speed / 10.0    # Normalize speed
-        obs[:, :, 2] = self.car_angle / 360.0   # Normalize angle
+        
+        #clamped_speed = max(0.0, min(self.car_speed, 10.0))
+        #obs[:, :, 1] = clamped_speed / 10.0    # Normalize speed
+        #normalized_angle = self.car_angle % 360
+        #obs[:, :, 2] = normalized_angle / 360.0   # Normalize angle
+        obs[:, :, 1] = min(max(self.car_speed, 0.0), 10.0) / 10.0
+        obs[:, :, 2] = (self.car_angle % 360) / 360.0
         return obs
     
     def _on_track(self, pos):
@@ -130,12 +175,13 @@ class TopDownEnv(gym.Env):
             return np.linalg.norm(np.array(pixel) - np.array(self.track_color)) < 10
         return False
     
-    def _lap_completed(self):
-        car_rect = pygame.Rect(self.car_pos[0]-5, self.car_pos[1]-5, 10, 10)
-        return car_rect.colliderect(self.finish_line)
+    def _lap_completed(self, car):
+        #car_rect = pygame.Rect(self.car_pos[0]-5, self.car_pos[1]-5, 10, 10)
+        #return car_rect.colliderect(self.finish_line)
+        return len(self.passed_checkpoints) == len(self.checkpoints) and car.colliderect(self.finish_line)
     
     def _log_lap_time(self, lap_time):
-        with open("lap_times_topdown.csv", mode="a", newline="") as file:
+        with open("top_lap_times.csv", mode="a", newline="") as file:
             writer = csv.writer(file)
             writer.writerow([self.current_lap, lap_time])
 
@@ -145,6 +191,15 @@ class TopDownEnv(gym.Env):
         screen.blit(self.track_surface, (0, 0))
         pygame.draw.circle(screen, self.car_color, self.car_pos.astype(int), 10)
 
+        # Checkpoints
+        for i, cp in enumerate(self.checkpoints):
+            color = (0, 255, 0) if i in self.passed_checkpoints else(255, 255, 0)
+            pygame.draw.rect(screen, color, cp)
+
+        # Finish line
+        pygame.draw.rect(screen, (255, 0, 255), self.finish_line)
+
+        # Trajectory heatmap
         max_val = np.max(self.trajectory)
         if max_val > 0:
             for x in range(0, self.screen_width, 4):
@@ -154,6 +209,7 @@ class TopDownEnv(gym.Env):
                         alpha = min(255, int(255 * (count / max_val)))
                         pygame.draw.rect(screen, (0, 255, 0, alpha), pygame.Rect(x, y, 4, 4))
         
+        # Lap info
         font = pygame.font.SysFont(None, 24)
         for i, lap_time in enumerate(self.lap_times):
             text = font.render(f"Lap {i+1}: {lap_time:.2f}s", True, (255, 255, 0))
