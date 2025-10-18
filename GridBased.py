@@ -206,7 +206,7 @@ class GridBasedEnv(gym.Env):
 
     def close(self):
         #return super().close()
-        pass
+        pygame.quit()
     
 if __name__ == "__main__":
     env = GridBasedEnv()

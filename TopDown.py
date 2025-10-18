@@ -21,6 +21,9 @@ class TopDownEnv(gym.Env):
         self.car_angle = 0.0
         self.car_speed = 0.0
         self.prev_pos = self.car_pos.copy()
+        self.prev_heading = 0.0
+        self.max_steering = 1.0
+        self.max_throttle = 1.0
 
         self.checkpoints = []
 
@@ -81,6 +84,8 @@ class TopDownEnv(gym.Env):
         self.lap_times = []
         self.trajectory.fill(0)
         self.passed_checkpoints = set()
+        self.prev_heading = 0.0
+        self.prev_pos = self.car_pos.copy()
 
         #x, y = self.car_pos.astype(int)
         #pixel = self.track_surface.get_at((x, y))[:3]
@@ -96,9 +101,16 @@ class TopDownEnv(gym.Env):
         self.car_angle += steer * 5
         self.car_speed = throttle * 2.0
 
-        dx = self.car_speed * np.cos(np.radians(self.car_angle))
-        dy = self.car_speed * np.sin(np.radians(self.car_angle))
-        self.car_pos += np.array([dx, dy])
+        steer = action[0] * self.max_steering
+        throttle = action[1] * self.max_throttle
+
+        self.car_heading += steer
+        self.car_velocity += throttle
+        self.car_pos += np.array([np.cos(self.car_heading), np.sin(self.car_heading)]) * self.car_velocity
+
+        #dx = self.car_speed * np.cos(np.radians(self.car_angle))
+        #dy = self.car_speed * np.sin(np.radians(self.car_angle))
+        #self.car_pos += np.array([dx, dy])
         self.step_count += 1
 
         x, y = self.car_pos.astype(int)
@@ -132,8 +144,12 @@ class TopDownEnv(gym.Env):
             print(f"[DEBUG] Remaining checkpoints: {remaining}")
             next_cp = self.checkpoints[remaining[0]]
             cp_center = np.array([next_cp.centerx, next_cp.centery])
-            dist = np.linalg.norm(cp_center - self.car_pos)
-            reward += max(0, 5.0 - dist / 100.0) * 0.05
+            to_cp = cp_center - self.car_pos
+            forward_vec = np.array([np.cos(self.car_heading), np.sin(self.car_heading)])
+            progress = np.dot(to_cp, forward_vec)
+            #dist = np.linalg.norm(cp_center - self.car_pos)
+            #reward += max(0, 5.0 - dist / 100.0) * 0.05
+            reward += max(0, progress / 100.0) * 0.1
 
         car = pygame.Rect(self.car_pos[0]-5, self.car_pos[1]-5, 10, 10)
         for i, cp in enumerate(self.checkpoints):

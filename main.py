@@ -20,8 +20,6 @@ topenv1 = TopDownEnv()
 check_env(topenv1)
 topenv1 = Monitor(topenv1, log_dir_ppo_top)
 
-topenv1.render()
-
 modelPPO = PPO(
     "MlpPolicy", 
     topenv1, 
@@ -37,7 +35,7 @@ modelPPO = PPO(
 
 callback_ppo_top = LapLoggerCallback(log_path="logs/ppo_topdown_stats.csv", verbose=1)
 modelPPO.learn(total_timesteps=300_000, callback=callback_ppo_top)
-modelPPO.save("ppo_topdown_v3")
+modelPPO.save("ppo_topdown_v4")
 
 ppo_top_results = load_results(log_dir_ppo_top)
 x, y = ts2xy(ppo_top_results, 'timesteps')
@@ -76,7 +74,7 @@ check_env(topenv2)
 topenv2 = Monitor(topenv2, log_dir_td3_top)
 
 n_actions = topenv2.action_space.shape[-1]
-action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.2 * np.ones(n_actions))
+action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.3 * np.ones(n_actions))
 
 modelTD3 = TD3(
     "MlpPolicy", 
@@ -93,7 +91,7 @@ modelTD3 = TD3(
 
 callback_td3_top = LapLoggerCallback(log_path="logs/td3_topdown_stats.csv", verbose=1)
 modelTD3.learn(total_timesteps=300_000, callback=callback_td3_top)
-modelTD3.save("td3_topdown_v3")
+modelTD3.save("td3_topdown_v4")
 
 td3_top_results = load_results(log_dir_td3_top)
 x, y = ts2xy(td3_top_results, 'timesteps')
@@ -147,7 +145,7 @@ model = PPO(
 callback_ppo_grid = LapLoggerCallback(log_path="logs/ppo_gridbased_stats.csv", verbose=1)
 #model.learn(total_timesteps=100_000)
 model.learn(total_timesteps=300_000, callback=callback_ppo_grid)
-model.save("ppo_gridbased_v3")
+model.save("ppo_gridbased_v4")
 
 ppo_grid_results = load_results(log_dir_ppo_grid)
 x, y = ts2xy(ppo_grid_results, 'timesteps')
@@ -203,7 +201,7 @@ modelDQN = DQN(
 callback_dqn_grid = LapLoggerCallback(log_path="logs/dqn_gridbased_stats.csv", verbose=1)
 #model.learn(total_timesteps=100_000)
 modelDQN.learn(total_timesteps=300_000, callback=callback_dqn_grid)
-modelDQN.save("dqn_gridbased_v3")
+modelDQN.save("dqn_gridbased_v4")
 
 dqn_grid_results = load_results(log_dir_dqn_grid)
 x, y = ts2xy(dqn_grid_results, 'timesteps')
