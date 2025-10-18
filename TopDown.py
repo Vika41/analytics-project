@@ -17,10 +17,15 @@ class TopDownEnv(gym.Env):
         self.car_color = (255, 0, 0)
         self.bg_color = (0, 0, 0)
 
-        self.car_pos = np.array([150.0, 150.0])
+        self.car_pos = np.array([100.0, 100.0])
         self.car_angle = 0.0
         self.car_speed = 0.0
         self.prev_pos = self.car_pos.copy()
+
+        self.checkpoints = []
+
+        self.track_surface = pygame.Surface((self.screen_width, self.screen_height))
+        self._build_track()
         self.num_checkpoints = len(self.checkpoints)
         
         obs_dim = 64 * 64 * 3 + self.num_checkpoints + 1
@@ -28,20 +33,17 @@ class TopDownEnv(gym.Env):
         #self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(64, 64, 3), dtype=np.float32)
         self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(obs_dim,), dtype=np.float32)
 
-        self.max_steps = 500
+        self.max_steps = 1000
         self.step_count = 0
         self.lap_start_time = None
         self.lap_times = []
         self.max_laps = 3
         self.current_lap = 0
 
-        self.track_surface = pygame.Surface((self.screen_width, self.screen_height))
-        self._build_track()
         self.clock = pygame.time.Clock()
         self.done = False
 
         self.trajectory = np.zeros((self.screen_width, self.screen_height), dtype=np.int32)
-        self.checkpoints = []
         self.passed_checkpoints = set()
 
     def _build_track(self):
@@ -59,12 +61,12 @@ class TopDownEnv(gym.Env):
         pygame.draw.arc(self.track_surface, self.track_color, pygame.Rect(600, 400, 100, 100), 0, 0.5*np.pi, 10)        # Bottom-right
         pygame.draw.arc(self.track_surface, self.track_color, pygame.Rect(100, 400, 100, 100), 0.5*np.pi, np.pi, 10)    # Bottom-left
 
-        self.finish_line = pygame.Rect(100, 100, 10, 50)
+        self.finish_line = pygame.Rect(100, 200, 100, 10)
         self.checkpoints = [
-            pygame.Rect(300, 100, 10, 50),
-            pygame.Rect(700, 300, 50, 10),
-            pygame.Rect(400, 500, 10, 50),
-            pygame.Rect(100, 300, 50, 10)
+            pygame.Rect(400, 100, 10, 100),
+            pygame.Rect(600, 300, 100, 10),
+            pygame.Rect(300, 400, 10, 100),
+            pygame.Rect(100, 350, 100, 10)
         ]
 
     def reset(self, *, seed=None, options=None):
@@ -127,6 +129,7 @@ class TopDownEnv(gym.Env):
 
         remaining = [i for i in range(self.num_checkpoints) if i not in self.passed_checkpoints]
         if remaining:
+            print(f"[DEBUG] Remaining checkpoints: {remaining}")
             next_cp = self.checkpoints[remaining[0]]
             cp_center = np.array([next_cp.centerx, next_cp.centery])
             dist = np.linalg.norm(cp_center - self.car_pos)
@@ -239,9 +242,15 @@ class TopDownEnv(gym.Env):
         for i, lap_time in enumerate(self.lap_times):
             text = font.render(f"Lap {i+1}: {lap_time:.2f}s", True, (255, 255, 0))
             screen.blit(text, (10, 10 + i * 20))
-        
-        pygame.display.flip()
-        self.clock.tick(30)
+
+        cp_text = font.render(f"Checkpoints: {len(self.passed_checkpoints)}", True, (0, 255, 255))
+        screen.blit(cp_text, (10, 10 + len(self.lap_times) * 20))
+
+        if mode == 'human':
+            pygame.display.flip()
+            self.clock.tick(30)
+        elif mode == 'rgb_array':
+            return pygame.surfarray.array3d(screen).swapaxes(0, 1)
 
     def close(self):
         pygame.quit()

@@ -1,6 +1,7 @@
 import csv
 import gymnasium as gym
 import numpy as np
+import pygame
 import time
 
 from gymnasium import spaces
@@ -16,11 +17,12 @@ class GridBasedEnv(gym.Env):
 
         self.finish_pos = [1, 1]
         self.prev_pos = self.agent_pos.copy()
-        self.num_checkpoints = len(self.checkpoints)
+        self.checkpoints = []
 
         self.track = np.zeros(self.grid_size, dtype=np.float32)
         self._build_track()
         #self.track[1:-1,1:-1] = 1.0
+        self.num_checkpoints = len(self.checkpoints)
 
         obs_dim = 10 * 10 * 2 + self.num_checkpoints + 1
         #self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(10, 10, 2), dtype=np.float32)
@@ -166,7 +168,41 @@ class GridBasedEnv(gym.Env):
         return obs
     
     def render(self, mode='human'):
-        print(f"Position: {self.agent_pos}, Direction: {self.agent_dir}, Lap: {self.current_lap}, Checkpoints: {sorted(self.passed_checkpoints)}")
+        #print(f"Position: {self.agent_pos}, Direction: {self.agent_dir}, Lap: {self.current_lap}, Checkpoints: {sorted(self.passed_checkpoints)}")
+        pygame.init()
+        cell_size = 60
+        screen_size = (self.grid_size[1] * cell_size, self.grid_size[0] * cell_size)
+        screen = pygame.display.set_mode(screen_size) if mode == 'human' else pygame.Surface(screen_size)
+
+        for x in range(self.grid_size[0]):
+            for y in range(self.grid_size[1]):
+                rect = pygame.Rect(y * cell_size, x * cell_size, cell_size, cell_size)
+                color = (255, 255, 255) if self.track[x, y] == 1.0 else (50, 50, 50)
+                pygame.draw.rect(screen, color, rect)
+
+        # Agent
+        ax, ay = self.agent_pos
+        pygame.draw.circle(screen, (255, 0, 0), (ay * cell_size + cell_size // 2, ax * cell_size + cell_size // 2), cell_size // 3)
+
+        # Checkpoints
+        for i, cp in enumerate(self.checkpoints):
+            cx, cy = cp
+            color = (0, 255, 0) if i in self.passed_checkpoints else (255, 255, 0)
+            pygame.draw.rect(screen, color, pygame.Rect(cy * cell_size, cx * cell_size, cell_size, cell_size))
+
+        # Lap info
+        font = pygame.font.SysFont(None, 24)
+        for i, lap_time in enumerate(self.lap_times):
+            text = font.render(f"Lap {i+1}: {lap_time:.2f}s", True, (255, 255, 0))
+            screen.blit(text, (10, 10 + i * 20))
+
+        cp_text = font.render(f"Checkpoints: {len(self.passed_checkpoints)}", True, (0, 255, 255))
+        screen.blit(cp_text, (10, 10 + len(self.lap_times) * 20))
+
+        if mode == 'human':
+            pygame.display.flip()
+        elif mode == 'rgb_array':
+            return pygame.surfarray.array3d(screen).swapaxes(0, 1)
 
     def close(self):
         #return super().close()

@@ -10,6 +10,7 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import NormalActionNoise
 from stable_baselines3.common.results_plotter import load_results, ts2xy
+from stable_baselines3.common.vec_env import VecVideoRecorder, DummyVecEnv
 from TopDown import TopDownEnv
 
 log_dir_ppo_top = "./logs/ppo_top_logs"
@@ -18,6 +19,8 @@ os.makedirs(log_dir_ppo_top, exist_ok=True)
 topenv1 = TopDownEnv()
 check_env(topenv1)
 topenv1 = Monitor(topenv1, log_dir_ppo_top)
+
+topenv1.render()
 
 modelPPO = PPO(
     "MlpPolicy", 
@@ -237,3 +240,30 @@ df.plot(x="Lap", y="Time", title="Lap Time Trend")
 df2 = pd.read_csv("grid_lap_times.csv", names=["Lap", "Time"])
 print(df2.describe())
 df2.plot(x="Lap", y="Time", title="Lap Time Trend")
+
+#top_env_rec_1 = DummyVecEnv([lambda: TopDownEnv()])
+#video_folder = "./videos/"
+#video_length = 500
+
+#top_env_rec_1 = VecVideoRecorder(
+#    top_env_rec_1,
+#    video_folder,
+#    record_video_trigger=lambda x: x % 10000 == 0,
+#    video_length=video_length,
+#    name_prefix="topdown_run"
+#)
+
+#model_rec_ppo = PPO(
+#    "MlpPolicy",
+#    top_env_rec_1,
+#    verbose=1,
+#    tensorboard_log=log_dir_ppo_top,
+#    learning_rate=3e-4,
+#    ent_coef=0.01,
+#    n_steps=1024,
+#    batch_size=64,
+#    gamma=0.99,
+#    clip_range=0.2
+#)
+#model_rec_ppo.learn(total_timesteps=30000)
+#top_env_rec_1.close()
