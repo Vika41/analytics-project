@@ -16,25 +16,46 @@ class TopDownEnv(gym.Env):
         self.track_color = (255, 255, 255)
         self.car_color = (255, 0, 0)
         self.bg_color = (0, 0, 0)
+        self.debug = False
 
-        self.car_pos = np.array([100.0, 100.0])
+        self.car_pos = np.array([150.0, 150.0])
         self.car_angle = 0.0
         self.car_speed = 0.0
-        self.prev_pos = self.car_pos.copy()
+        self.car_heading = 0.0
+        self.car_velocity = 0.0
+        self.car_radius = 10
+
         self.prev_heading = 0.0
-        self.max_steering = 1.0
+        self.prev_pos = self.car_pos.copy()
+
+        self.max_steering = 0.3
         self.max_throttle = 1.0
+        self.max_velocity = 5.0
+
+        self.num_obstacles = 5
+        self.obstacle_radius = 10
+        self.obstacles = []
 
         self.checkpoints = []
 
+        self.track_outline = [
+            (100, 100), (600, 100), (700, 100), (700, 500),
+            (100, 500), (100, 100), (100, 200), (100, 200)
+        ]
+        #self.track_outline = []
+        self.track_mask = pygame.Surface((self.screen_width, self.screen_height))
+        self.track_mask.fill((0, 0, 0))
+        self.track_width = 40
         self.track_surface = pygame.Surface((self.screen_width, self.screen_height))
         self._build_track()
         self.num_checkpoints = len(self.checkpoints)
         
         obs_dim = 64 * 64 * 3 + self.num_checkpoints + 1
-        self.action_space = spaces.Box(low=np.array([-1, 0]), high=np.array([1, 1]), dtype=np.float32)
+        #self.action_space = spaces.Box(low=np.array([-1, 0]), high=np.array([1, 1]), dtype=np.float32)
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
         #self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(64, 64, 3), dtype=np.float32)
-        self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(obs_dim,), dtype=np.float32)
+        #self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(obs_dim,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(7,), dtype=np.float32)
 
         self.max_steps = 1000
         self.step_count = 0
@@ -68,24 +89,74 @@ class TopDownEnv(gym.Env):
         self.checkpoints = [
             pygame.Rect(400, 100, 10, 100),
             pygame.Rect(600, 300, 100, 10),
-            pygame.Rect(300, 400, 10, 100),
+            pygame.Rect(450, 400, 10, 100),
             pygame.Rect(100, 350, 100, 10)
         ]
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
+        self.obstacles = []
+
+        #cp_centers = [np.array([cp.centerx, cp.centery]) for cp in self.checkpoints]
+        #left_edge, right_edge = [], []
+
+        #for i in range(len(cp_centers)):
+        #    p1 = cp_centers[i]
+        #    p2 = cp_centers[(i + 1) % len(cp_centers)]
+        #    direction = p2 - p1
+        #    norm = direction / (np.linalg.norm(direction) + 1e-6)
+        #    perp = np.array([-norm[1], norm[0]])
+
+        #    left = p1 + perp * self.track_width
+        #    right = p1 - perp * self.track_width
+        #    left_edge.append(left)
+        #    right_edge.append(right)
+
+        #self.track_outline = [pt.astype(int) for pt in left_edge + right_edge[::-1]]
+        self.track_mask = pygame.Surface((self.screen_width, self.screen_height))
+        self.track_mask.fill((0, 0, 0))
+        pygame.draw.polygon(self.track_mask, (255, 255, 255), self.track_outline)
+
         self.car_pos = np.array([150.0, 150.0])
+
+        for _ in range(self.num_obstacles):
+            for _ in range(100):
+                x = np.random.randint(50, self.screen_width - 50)
+                y = np.random.randint(50, self.screen_height - 50)
+                pos = np.array([x, y])
+
+                if np.linalg.norm(pos - self.car_pos) < 100:
+                    continue
+                if any(np.linalg.norm(pos - np.array([cp.centerx, cp.centery])) < 100 for cp in self.checkpoints):
+                    continue
+                if self.finish_line.collidepoint(*pos):
+                    continue
+                if self.track_mask.get_at((x, y)) != (255, 255, 255, 255):
+                    continue
+
+                #if hasattr(self, "track_polygon") and not self.track_polygon.collidepoint:
+                #    continue
+
+                self.obstacles.append(pos)
+                break
+
+        #self.car_pos = np.array([start_x, start_y], dtype=np.float32)
         self.car_angle = 0.0
         self.car_speed = 0.0
+        self.car_velocity = 0.0
+        self.car_heading = 0.0
+
+        self.prev_heading = 0.0
+        self.prev_pos = self.car_pos.copy()
+        self.passed_checkpoints = set()
+
         self.step_count = 0
         self.done = False
-        self.lap_start_time = time.time()
+
         self.current_lap = 0
         self.lap_times = []
         self.trajectory.fill(0)
-        self.passed_checkpoints = set()
-        self.prev_heading = 0.0
-        self.prev_pos = self.car_pos.copy()
+        self.lap_start_time = time.time()
 
         #x, y = self.car_pos.astype(int)
         #pixel = self.track_surface.get_at((x, y))[:3]
@@ -97,119 +168,99 @@ class TopDownEnv(gym.Env):
         return obs, info
     
     def step(self, action):
-        steer, throttle = np.clip(action, [-1, 0], [1, 1])
-        self.car_angle += steer * 5
-        self.car_speed = throttle * 2.0
-
-        steer = action[0] * self.max_steering
-        throttle = action[1] * self.max_throttle
+        steer = float(np.clip(action[0], -1.0, 1.0)) * self.max_steering
+        throttle = float(np.clip(action[1], -1.0, 1.0)) * self.max_throttle
 
         self.car_heading += steer
-        self.car_velocity += throttle
+        #self.car_heading = (self.car_heading + steer) % (2 * np.pi)
+        self.car_velocity = np.clip(self.car_velocity + throttle, 0.0, self.max_velocity)
         self.car_pos += np.array([np.cos(self.car_heading), np.sin(self.car_heading)]) * self.car_velocity
 
-        #dx = self.car_speed * np.cos(np.radians(self.car_angle))
-        #dy = self.car_speed * np.sin(np.radians(self.car_angle))
-        #self.car_pos += np.array([dx, dy])
+        #steer = np.clip(steer, -self.max_steering, self.max_steering)
+
         self.step_count += 1
-
-        x, y = self.car_pos.astype(int)
-        print(f"[STEP {self.step_count}] pos={self.car_pos}, angle={self.car_angle}, speed={self.car_speed}")
-        if 0 <= x < self.screen_width and 0 <= y < self.screen_height:
-            pixel = self.track_surface.get_at((x, y))
-            #print(f"[PIXEL] color={pixel[:3]} at ({x}, {y})")
-            self.trajectory[x, y] += 1
-
-        #reward = 0.5 if self._on_track(self.car_pos) else -1.0
-        reward = 0.1
+        reward = 0.0
         terminated = False
-        truncated = self.step_count >= self.max_steps
-        lap_time = None
+        info = {}
 
-        if self._on_track(self.car_pos):
-            reward += 1.0
-            reward += self.car_speed * 0.05
-        else:
-            reward -= 1.0
-            terminated = True
-            print(f"[CRASH] Off track at step {self.step_count}, pos={self.car_pos}")
-
-        if self.step_count > 1 and np.linalg.norm(self.car_pos - self.prev_pos) < 1.0:
-            reward -= 0.2
-
-        self.prev_pos = self.car_pos.copy()
+        for ob in self.obstacles:
+            if np.linalg.norm(self.car_pos - ob) < self.obstacle_radius + self.car_radius:
+                reward -= 1.0
+                terminated = True
+                break
 
         remaining = [i for i in range(self.num_checkpoints) if i not in self.passed_checkpoints]
         if remaining:
-            print(f"[DEBUG] Remaining checkpoints: {remaining}")
             next_cp = self.checkpoints[remaining[0]]
             cp_center = np.array([next_cp.centerx, next_cp.centery])
             to_cp = cp_center - self.car_pos
             forward_vec = np.array([np.cos(self.car_heading), np.sin(self.car_heading)])
-            progress = np.dot(to_cp, forward_vec)
-            #dist = np.linalg.norm(cp_center - self.car_pos)
-            #reward += max(0, 5.0 - dist / 100.0) * 0.05
-            reward += max(0, progress / 100.0) * 0.1
+            alignment = np.dot(to_cp, forward_vec) / (np.linalg.norm(to_cp) + 1e-6)
+            reward += max(0, alignment) * 0.05
 
-        car = pygame.Rect(self.car_pos[0]-5, self.car_pos[1]-5, 10, 10)
+        heading_change = abs(self.car_heading - self.prev_heading)
+        if heading_change > np.pi / 2:
+            reward -= 0.2
+        self.prev_heading = self.car_heading
+
+        #if self._on_track(self.car_pos) and throttle > 0:
+        #    forward_vec = np.array([np.cos(self.car_heading), np.sin(self.car_heading)])
+        #    velocity_vec = self.car_velocity * forward_vec
+        #    reward += np.dot(velocity_vec, forward_vec) * 0.01
+
+        if np.linalg.norm(self.car_pos - self.prev_pos) < 1.0:
+            reward -= 0.2
+        self.prev_pos = self.car_pos.copy()
+
+        self.collided_with_obstacle = False
+        for ob in self.obstacles:
+            if np.linalg.norm(self.car_pos - ob) < self.obstacle_radius + self.car_radius:
+                reward -= 1.0
+                terminated = True
+                self.collided_with_obstacle = True
+                break
+        
+        if not self._on_track(self.car_pos):
+            reward -= 1.0
+            terminated = True
+        
         for i, cp in enumerate(self.checkpoints):
-            if i not in self.passed_checkpoints and car.colliderect(cp):
+            if i not in self.passed_checkpoints and cp.collidepoint(*self.car_pos):
                 self.passed_checkpoints.add(i)
-                reward += 2.0
-                print(f"[CHECKPOINT] Passed checkpoint {i}")
+                reward += 1.0
 
-        if self._lap_completed(car):
+        if self.finish_line.collidepoint(*self.car_pos) and len(self.passed_checkpoints) == self.num_checkpoints:
             lap_time = time.time() - self.lap_start_time
-            self._log_lap_time(lap_time)
             self.lap_times.append(lap_time)
             self.lap_start_time = time.time()
-            self.current_lap += 1
-            reward += max(0, 20.0 - lap_time) # Faster lap = Higher reward
-            print(f"[LAP] Completed lap {self.current_lap} in {lap_time:.2f}s")
             self.passed_checkpoints.clear()
+            reward += 5.0
 
-            if self.current_lap >= self.max_laps:
-                terminated = True
-                print("[FINISH] Max laps reached")
+        info.update({
+            "current_lap": len(self.lap_times),
+            "lap_time": self.lap_times[-1] if self.lap_times else None,
+            "checkpoints_passed": len(self.passed_checkpoints),
+            "obstacle_collision": self.collided_with_obstacle
+        })
 
-        #logger.record("topdown/checkpoints_passed", len(self.passed_checkpoints))
-        #logger.record("topdown/lap", self.current_lap)
-        #if lap_time:
-        #    logger.record("topdown/lap_time")
-
-        info = {
-            "lap_times": self.lap_times,
-            "current_lap": self.current_lap,
-            "lap_time": lap_time if self.current_lap > 0 else None,
-            "checkpoints_passed": len(self.passed_checkpoints)
-        }
         obs = self._get_obs()
-        return obs, reward, terminated, truncated, info
-    
+        return obs, reward, terminated, False, info
+
     def _get_obs(self):
-        checkpoint_obs = np.zeros(self.num_checkpoints, dtype=np.float32)
-        for i in self.passed_checkpoints:
-            checkpoint_obs[i] = 1.0
-        
-        obs = np.zeros((64, 64, 3), dtype=np.float32)
-        x = int(self.car_pos[0] / (self.screen_width / 64))
-        y = int(self.car_pos[1] / (self.screen_height / 64))
-        if 0 <= x < 64 and 0 <= y < 64:
-            obs[y, x, 0] = 1.0                  # Mark car position
-        
-        #clamped_speed = max(0.0, min(self.car_speed, 10.0))
-        #obs[:, :, 1] = clamped_speed / 10.0    # Normalize speed
-        #normalized_angle = self.car_angle % 360
-        #obs[:, :, 2] = normalized_angle / 360.0   # Normalize angle
-        obs[:, :, 1] = min(max(self.car_speed, 0.0), 10.0) / 10.0
-        obs[:, :, 2] = (self.car_angle % 360) / 360.0
+        cp_vec = np.zeros(2)
+        remaining = [i for i in range(self.num_checkpoints) if i not in self.passed_checkpoints]
+        if remaining:
+            next_cp = self.checkpoints[remaining[0]]
+            cp_center = np.array([next_cp.centerx, next_cp.centery])
+            cp_vec = cp_center - self.car_pos
 
         obs = np.concatenate([
-            obs.flatten(),
-            checkpoint_obs,
-            [self.current_lap / self.max_laps]
-        ]).astype(np.float32)
-        return obs
+            self.car_pos / np.array([self.screen_width, self.screen_height]),
+            [np.cos(self.car_heading), np.sin(self.car_heading)],
+            cp_vec / (np.linalg.norm(cp_vec) + 1e-6),
+            [self.car_velocity / self.max_velocity]
+        ])
+        return obs.astype(np.float32)
     
     def _on_track(self, pos):
         x, y = pos.astype(int)
@@ -234,6 +285,12 @@ class TopDownEnv(gym.Env):
         screen = pygame.display.set_mode((self.screen_width, self.screen_height))
         screen.blit(self.track_surface, (0, 0))
         pygame.draw.circle(screen, self.car_color, self.car_pos.astype(int), 10)
+        pygame.draw.polygon(self.track_mask, (255, 255, 255), self.track_outline)
+        pygame.draw.polygon(self.track_surface, (50, 50, 50), self.track_outline, width=2)
+
+        # Obstacles
+        for ob in self.obstacles:
+            pygame.draw.circle(screen, (128, 0, 0), ob.astype(int), self.obstacle_radius)
 
         # Checkpoints
         for i, cp in enumerate(self.checkpoints):
@@ -242,6 +299,9 @@ class TopDownEnv(gym.Env):
 
         # Finish line
         pygame.draw.rect(screen, (255, 0, 255), self.finish_line)
+
+        if self.debug:
+            screen.blit(self.track_mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
 
         # Trajectory heatmap
         max_val = np.max(self.trajectory)
