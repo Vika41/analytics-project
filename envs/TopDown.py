@@ -76,7 +76,7 @@ class TopDownEnv(gym.Env):
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
-        self.car_pos = np.array([150.0, 150.0])
+        self.car_pos = np.array([100.0, 100.0])
         self.car_angle = 0.0
         self.car_speed = 0.0
         self.step_count = 0
@@ -103,16 +103,16 @@ class TopDownEnv(gym.Env):
         self.car_angle += steer * 5
         self.car_speed = throttle * 2.0
 
-        steer = action[0] * self.max_steering
-        throttle = action[1] * self.max_throttle
+        #steer = action[0] * self.max_steering
+        #throttle = action[1] * self.max_throttle
 
-        self.car_heading += steer
-        self.car_velocity += throttle
-        self.car_pos += np.array([np.cos(self.car_heading), np.sin(self.car_heading)]) * self.car_velocity
+        #self.car_heading += steer
+        #self.car_velocity += throttle
+        #self.car_pos += np.array([np.cos(self.car_heading), np.sin(self.car_heading)]) * self.car_velocity
 
-        #dx = self.car_speed * np.cos(np.radians(self.car_angle))
-        #dy = self.car_speed * np.sin(np.radians(self.car_angle))
-        #self.car_pos += np.array([dx, dy])
+        dx = self.car_speed * np.cos(np.radians(self.car_angle))
+        dy = self.car_speed * np.sin(np.radians(self.car_angle))
+        self.car_pos += np.array([dx, dy])
         self.step_count += 1
 
         x, y = self.car_pos.astype(int)

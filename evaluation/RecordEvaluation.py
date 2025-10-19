@@ -42,7 +42,8 @@ for step in range(1000):
         "lap_time": lap_time if lap_time is not None else "",
         "checkpoints": checkpoints,
         "position_x": agent_pos[0] if agent_pos is not None else "",
-        "position_y": agent_pos[1] if agent_pos is not None else ""
+        "position_y": agent_pos[1] if agent_pos is not None else "",
+        "obstacle_collision": info.get("obstacle_collision", False)
     })
 
     if done:
