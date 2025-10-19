@@ -1,6 +1,6 @@
 # Rapport
 
-Alla resultat finns i TensorFlow.
+Alla resultat finns i TensorBoard.
 
 ## TopDown-miljön (Status: Klar)
 

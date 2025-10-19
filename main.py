@@ -35,7 +35,7 @@ modelPPO = PPO(
 
 callback_ppo_top = LapLoggerCallback(log_path="logs/ppo_topdown_stats.csv", verbose=1)
 modelPPO.learn(total_timesteps=300_000, callback=callback_ppo_top)
-modelPPO.save("ppo_topdown_v4")
+modelPPO.save("ppo_topdown_v6")
 
 ppo_top_results = load_results(log_dir_ppo_top)
 x, y = ts2xy(ppo_top_results, 'timesteps')
@@ -49,7 +49,8 @@ plt.show()
 lap_times = []
 obs, info = topenv1.reset()
 for _ in range(1000):
-    action, _ = modelPPO.predict(obs)
+    #action, _ = modelPPO.predict(obs)
+    action, _ = modelPPO.predict(obs, deterministic=True)
     obs, reward, terminated, truncated, info = topenv1.step(action)
     topenv1.render()
     if info.get("lap_time"):
@@ -91,7 +92,7 @@ modelTD3 = TD3(
 
 callback_td3_top = LapLoggerCallback(log_path="logs/td3_topdown_stats.csv", verbose=1)
 modelTD3.learn(total_timesteps=300_000, callback=callback_td3_top)
-modelTD3.save("td3_topdown_v4")
+modelTD3.save("td3_topdown_v5")
 
 td3_top_results = load_results(log_dir_td3_top)
 x, y = ts2xy(td3_top_results, 'timesteps')
@@ -105,7 +106,7 @@ plt.show()
 obs, info = topenv2.reset()
 lap_times = []
 for _ in range(1000):
-    action, _ = modelTD3.predict(obs)
+    action, _ = modelTD3.predict(obs, deterministic=True)
     obs, reward, terminated, truncated, _ = topenv2.step(action)
     topenv2.render()
     if info.get("lap_time"):
@@ -145,7 +146,7 @@ model = PPO(
 callback_ppo_grid = LapLoggerCallback(log_path="logs/ppo_gridbased_stats.csv", verbose=1)
 #model.learn(total_timesteps=100_000)
 model.learn(total_timesteps=300_000, callback=callback_ppo_grid)
-model.save("ppo_gridbased_v4")
+model.save("ppo_gridbased_v5")
 
 ppo_grid_results = load_results(log_dir_ppo_grid)
 x, y = ts2xy(ppo_grid_results, 'timesteps')
@@ -159,7 +160,7 @@ plt.show()
 obs, info = gridenv1.reset()
 lap_times = []
 for _ in range(1000):
-    action, _ = model.predict(obs)
+    action, _ = model.predict(obs, deterministic=True)
     obs, reward, terminated, truncated, info = gridenv1.step(action)
     gridenv1.render()
     if info.get("lap_time"):
@@ -201,7 +202,7 @@ modelDQN = DQN(
 callback_dqn_grid = LapLoggerCallback(log_path="logs/dqn_gridbased_stats.csv", verbose=1)
 #model.learn(total_timesteps=100_000)
 modelDQN.learn(total_timesteps=300_000, callback=callback_dqn_grid)
-modelDQN.save("dqn_gridbased_v4")
+modelDQN.save("dqn_gridbased_v5")
 
 dqn_grid_results = load_results(log_dir_dqn_grid)
 x, y = ts2xy(dqn_grid_results, 'timesteps')
@@ -215,7 +216,7 @@ plt.show()
 obs, info = gridenv2.reset()
 lap_times = []
 for _ in range(1000):
-    action, _ = modelDQN.predict(obs)
+    action, _ = modelDQN.predict(obs, deterministic=True)
     obs, reward, terminated, truncated, info = gridenv2.step(action)
     gridenv2.render()
     if info.get("lap_time"):
