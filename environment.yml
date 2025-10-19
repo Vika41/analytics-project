@@ -22,3 +22,5 @@ dependencies:
       - wandb
       - tqdm
       - pyquaternion
+      - tensorboard
+      - tensorboardX
